@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>手作訂單管理</title>
+<meta name="description" content="手作小店的訂單登記工具：在手機上登記商品、數量與備註，資料存在自己的手機裡，可匯出 CSV。">
+<meta name="theme-color" content="#f5f1f6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="訂單管理">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 手機優先的單欄工具：上方摘要列，中間是目前分頁（登記／訂單／商品），底部固定分頁列 */
+:root{
+  --bg:#f5f1f6; --surface:#ffffff; --ink:#2a2230; --muted:#776c7d; --line:#e5dde9;
+  --accent:#8a4b7b; --accent-ink:#ffffff; --accent-soft:#f1e3ee; --gold:#a8822f;
+  --todo:#a5701a; --todo-bg:#fbf0dc; --making:#3f63a3; --making-bg:#e4ecf9;
+  --shipped:#2f7d5d; --shipped-bg:#dff1e8; --done:#6f6876; --done-bg:#ece9ef;
+  --danger:#b33a4a; --shadow:0 10px 28px -18px rgba(70,30,60,.45);
+  --display:"Noto Serif TC","Songti TC",serif; --body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif; --num:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#17131a; --surface:#221c26; --ink:#f2ecf4; --muted:#a99eaf; --line:#3a3140;
+  --accent:#d79bc8; --accent-ink:#241a22; --accent-soft:#3a2836; --gold:#d8b46a;
+  --todo:#e7b45c; --todo-bg:#3a2e1a; --making:#8fb0ec; --making-bg:#1f2a40; --shipped:#7fd0aa; --shipped-bg:#18342a; --done:#b8b0bf; --done-bg:#2c2730;
+  --danger:#f08a97; --shadow:0 10px 28px -18px rgba(0,0,0,.8); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#17131a; --surface:#221c26; --ink:#f2ecf4; --muted:#a99eaf; --line:#3a3140;
+  --accent:#d79bc8; --accent-ink:#241a22; --accent-soft:#3a2836; --gold:#d8b46a;
+  --todo:#e7b45c; --todo-bg:#3a2e1a; --making:#8fb0ec; --making-bg:#1f2a40; --shipped:#7fd0aa; --shipped-bg:#18342a; --done:#b8b0bf; --done-bg:#2c2730;
+  --danger:#f08a97; --shadow:0 10px 28px -18px rgba(0,0,0,.8); color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:20;background:var(--bg)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(96px + env(safe-area-inset-bottom,0px))}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+
+/* 頁首 */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:15;background:var(--bg);padding-block:14px 10px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand small{font-family:var(--num);font-size:11px;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.brand h1{font-family:var(--display);font-size:24px;margin:0;letter-spacing:.06em}
+.stats{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.stat{display:flex;align-items:baseline;gap:6px;padding:5px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--muted)}
+.stat b{font-family:var(--num);font-size:15px;color:var(--ink)}
+.stat.todo b{color:var(--todo)}
+.sync{margin-left:auto;font-size:12px;color:var(--muted);align-self:center}
+
+section.view{padding-top:18px}
+h2{font-family:var(--display);font-size:20px;margin:0 0 4px;letter-spacing:.04em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+.banner{padding:12px 14px;border-radius:12px;background:var(--todo-bg);color:var(--todo);font-size:14px;margin-top:14px}
+
+/* 表單 */
+.field{display:grid;gap:6px;margin-bottom:16px}
+.field > span{font-size:13px;font-weight:500;color:var(--muted)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input[type=text],input[type=date],input[type=number],input[type=search],select,textarea{width:100%;min-height:46px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface)}
+textarea{min-height:84px;resize:vertical}
+.lines{display:grid;gap:12px}
+.line{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px}
+.line-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:38px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-size:14px}
+.chip[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:500}
+.line-row{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:end;margin-top:12px}
+.stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:12px;overflow:hidden;height:46px}
+.stepper button{width:44px;height:100%;border:0;background:var(--accent-soft);font-size:20px;color:var(--accent)}
+.stepper input{width:52px;height:100%;border:0;text-align:center;background:var(--surface);font-family:var(--num);font-size:16px}
+.price label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.link{border:0;background:none;color:var(--accent);font-size:13px;padding:4px 2px}
+.link.danger{color:var(--danger)}
+.add-line{width:100%;min-height:46px;border:1.5px dashed var(--line);border-radius:14px;background:transparent;color:var(--accent);font-weight:500}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px}
+.seg button{min-height:40px;border:0;border-radius:10px;background:transparent;font-size:14px;color:var(--muted)}
+.seg button[aria-checked="true"]{font-weight:700}
+.seg button[data-s="todo"][aria-checked="true"]{background:var(--todo-bg);color:var(--todo)}
+.seg button[data-s="making"][aria-checked="true"]{background:var(--making-bg);color:var(--making)}
+.seg button[data-s="shipped"][aria-checked="true"]{background:var(--shipped-bg);color:var(--shipped)}
+.seg button[data-s="done"][aria-checked="true"]{background:var(--done-bg);color:var(--done)}
+.total{display:flex;justify-content:space-between;align-items:baseline;padding:12px 2px;color:var(--muted);font-size:14px}
+.total b{font-family:var(--num);font-size:18px;color:var(--ink)}
+.primary{width:100%;min-height:52px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);font-size:16px;font-weight:700;box-shadow:var(--shadow)}
+.primary:disabled{opacity:.5;cursor:default}
+.secondary{min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-weight:500}
+.form-err{color:var(--danger);font-size:13px;min-height:20px;margin:8px 2px 0}
+.editing{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:var(--accent-soft);color:var(--accent);font-size:14px;margin-bottom:16px}
+
+/* 訂單列表 */
+.toolbar{display:grid;gap:10px;margin-bottom:12px}
+.filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters .chip{flex:none}
+.tb-row{display:grid;grid-template-columns:1fr auto;gap:10px}
+.summary{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:4px 2px 14px}
+.summary b{font-family:var(--num);color:var(--ink);font-size:15px;margin-left:4px}
+.day{font-family:var(--num);font-size:12px;letter-spacing:.08em;color:var(--muted);margin:18px 2px 8px}
+.order{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px}
+.o-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.o-name{font-weight:700;font-size:16px;min-width:0;overflow-wrap:anywhere}
+.o-contact{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.pill{flex:none;border:0;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:700;min-height:32px}
+.pill.todo{background:var(--todo-bg);color:var(--todo)}.pill.making{background:var(--making-bg);color:var(--making)}
+.pill.shipped{background:var(--shipped-bg);color:var(--shipped)}.pill.done{background:var(--done-bg);color:var(--done)}
+.o-items{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:4px}
+.o-items li{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.o-items li span:last-child{font-family:var(--num);color:var(--muted);flex:none}
+.o-note{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--bg);font-size:13px;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.o-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px;color:var(--muted)}
+.o-foot .acts{display:flex;gap:6px}
+
+.empty{text-align:center;padding:40px 18px;border:1.5px dashed var(--line);border-radius:18px;color:var(--muted)}
+.empty b{display:block;font-family:var(--display);font-size:18px;color:var(--ink);margin-bottom:6px}
+
+/* 商品 */
+.plist{display:grid;gap:8px;margin-bottom:18px}
+.prod{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.prod .n{font-weight:500;overflow-wrap:anywhere}
+.prod .c{font-size:12px;color:var(--muted)}
+.prod .acts{display:flex;gap:4px}
+.prod input{min-height:40px}
+.addp{display:grid;grid-template-columns:1fr auto;gap:10px}
+.addp .primary{width:auto;padding:0 20px;min-height:46px;box-shadow:none}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:22px}
+.card h3{font-family:var(--display);font-size:16px;margin:0 0 6px}
+.card p{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.card .btns{display:flex;gap:8px;flex-wrap:wrap}
+.filebtn{display:inline-flex;align-items:center;cursor:pointer}
+.csvbox{width:100%;min-height:120px;margin-top:10px;font-family:var(--num);font-size:12px}
+
+/* 底部分頁列 */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:6px calc(6px + env(safe-area-inset-bottom,0px))}
+nav.tabs .in{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+nav.tabs a{display:grid;justify-items:center;gap:2px;padding:6px 0;border-radius:12px;text-decoration:none;color:var(--muted);font-size:12px}
+nav.tabs a svg{width:22px;height:22px}
+nav.tabs a[aria-current="page"]{color:var(--accent);background:var(--accent-soft);font-weight:700}
+
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;z-index:30;
+  background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:14px;transition:.25s;pointer-events:none;max-width:calc(100% - 32px)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+@media (max-width:380px){.row2{grid-template-columns:1fr}.seg{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><small id="shop-name">我的小店</small><h1>訂單管理</h1></div>
+    <div class="stats">
+      <span class="stat todo">待製作<b id="st-todo">–</b></span>
+      <span class="stat">本月訂單<b id="st-month">–</b></span>
+      <span class="stat">本月件數<b id="st-qty">–</b></span>
+      <span class="sync" id="sync">連線中…</span>
+    </div>
+    <div class="banner" id="banner" hidden></div>
+  </header>
+
+  <!-- 登記 -->
+  <section class="view" id="view-new">
+    <div class="editing" id="editing" hidden><span>正在編輯 <b id="editing-name"></b> 的訂單</span><button class="link" id="cancel-edit" type="button">取消編輯</button></div>
+    <h2 id="form-title">登記新訂單</h2>
+    <p class="sub">選商品、填數量，按下儲存就會記到訂單裡。</p>
+    <form id="order-form" novalidate>
+      <div class="row2">
+        <label class="field"><span>日期</span><input type="date" id="f-date" required></label>
+        <label class="field"><span>客人</span><input type="text" id="f-customer" placeholder="例：王小姐" autocomplete="off"></label>
+      </div>
+      <label class="field"><span>聯絡方式（選填）</span><input type="text" id="f-contact" placeholder="LINE、IG 或電話" autocomplete="off"></label>
+      <div class="field"><span>商品與數量</span>
+        <div class="lines" id="lines"></div>
+        <button class="add-line" id="add-line" type="button">＋ 再加一項商品</button>
+      </div>
+      <div class="field"><span>狀態</span>
+        <div class="seg" id="f-status" role="radiogroup" aria-label="訂單狀態"></div>
+      </div>
+      <label class="field"><span>備註</span><textarea id="f-note" placeholder="尺寸、款式、交貨日期、付款方式…"></textarea></label>
+      <div class="total"><span>共 <b id="f-qty">0</b> 件</span><span>金額 <b id="f-amt">–</b></span></div>
+      <button class="primary" id="save" type="submit">儲存訂單</button>
+      <p class="form-err" id="form-err" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- 訂單 -->
+  <section class="view" id="view-orders" hidden>
+    <h2>全部訂單</h2>
+    <p class="sub">點狀態可以切換下一步，從待製作一路到已完成。</p>
+    <div class="toolbar">
+      <div class="filters" id="f-filter" role="radiogroup" aria-label="依狀態篩選"></div>
+      <div class="tb-row">
+        <input type="search" id="q" placeholder="搜尋客人、商品或備註">
+        <select id="month" aria-label="月份"></select>
+      </div>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div id="olist"></div>
+    <div class="card">
+      <h3>匯出訂單</h3>
+      <p>匯出成 CSV 檔，可以用 Excel 或 Google 試算表打開。會照目前的篩選條件匯出。</p>
+      <div class="btns">
+        <button class="secondary" id="export" type="button">匯出 CSV</button>
+        <button class="secondary" id="copy" type="button">複製表格文字</button>
+      </div>
+      <textarea class="csvbox" id="csvbox" hidden readonly aria-label="CSV 內容"></textarea>
+    </div>
+  </section>
+
+  <!-- 商品 -->
+  <section class="view" id="view-products" hidden>
+    <h2>商品項目</h2>
+    <p class="sub">登記訂單時可選的商品，可以自己新增。改名或刪除不會影響已經登記的訂單。</p>
+    <div class="plist" id="plist"></div>
+    <form class="addp" id="addp" novalidate>
+      <input type="text" id="p-new" placeholder="新增商品，例：戒指" autocomplete="off" aria-label="新商品名稱">
+      <button class="primary" type="submit">新增</button>
+    </form>
+    <p class="hint">右邊數字是這個商品累計登記的件數。</p>
+    <div class="card">
+      <h3>店名</h3>
+      <p>顯示在頁面最上方，只有你自己看得到。</p>
+      <form class="addp" id="shop-form" novalidate>
+        <input type="text" id="shop-input" placeholder="例：小花手作" autocomplete="off" aria-label="店名">
+        <button class="primary" type="submit">儲存</button>
+      </form>
+    </div>
+    <div class="card">
+      <h3>資料備份</h3>
+      <p>訂單只存在這支手機的瀏覽器裡。換手機、清除瀏覽器資料之前，請先下載備份檔，之後用「匯入備份」就能還原。</p>
+      <div class="btns">
+        <button class="secondary" id="backup" type="button">下載備份檔</button>
+        <label class="secondary filebtn">匯入備份<input type="file" id="restore" accept=".json,application/json" hidden></label>
+      </div>
+      <p class="hint" id="backup-hint"></p>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs" aria-label="分頁">
+  <div class="in">
+    <a href="#new" data-v="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>登記</a>
+    <a href="#orders" data-v="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/></svg>訂單</a>
+    <a href="#products" data-v="products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3.5c2.6 0 4.5 2 4.5 5.2v7.1c0 2.6-2 4.7-4.5 4.7s-4.5-2.1-4.5-4.7V8.7c0-3.2 1.9-5.2 4.5-5.2z"/><path d="M9.5 8.5c.6-1.4 1.4-2 2.5-2"/></svg>商品</a>
+  </div>
+</nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const STATUS = [{k:'todo', t:'待製作'}, {k:'making', t:'製作中'}, {k:'shipped', t:'已出貨'}, {k:'done', t:'已完成'}];
+const SNAME = Object.fromEntries(STATUS.map(s => [s.k, s.t]));
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const money = n => 'NT$' + Number(n).toLocaleString('zh-TW');
+
+let db = null, canWrite = true;
+const LS_KEY = 'handmade-orders-v1', SHOP_KEY = 'handmade-orders-shop';
+const DEFAULT_PRODUCTS = ['美甲片', '耳環', '手鍊', '項鍊'];
+// 本機資料庫：資料存在這支手機的瀏覽器（localStorage），寫法和雲端版相同
+function makeLocalDB(){
+  let state;
+  try { state = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); localStorage.setItem(LS_KEY + '-t', '1'); localStorage.removeItem(LS_KEY + '-t'); }
+  catch (e) { return null; }
+  if (!state) state = {products: {}, orders: {}, seeded: false};
+  if (!state.seeded) { DEFAULT_PRODUCTS.forEach((n, i) => state.products['p' + (i + 1)] = {name: n, sort: i + 1}); state.seeded = true; }
+  const subs = [];
+  const persist = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { throw {code: 'quota_exceeded'}; } };
+  const notify = () => subs.forEach(f => f());
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  persist();
+  function collection(name){
+    let field = null, dir = 'asc';
+    const q = {
+      orderBy(f, d = 'asc'){ field = f; dir = d; return q; },
+      limit(){ return q; },
+      doc(id = newId()){
+        return {
+          id,
+          async set(data){ state[name][id] = JSON.parse(JSON.stringify(data)); persist(); notify(); },
+          async update(data){ if (!state[name][id]) throw {code: 'invalid_argument'}; Object.assign(state[name][id], data); persist(); notify(); },
+          async delete(){ delete state[name][id]; persist(); notify(); }
+        };
+      },
+      onSnapshot(cb){
+        const fire = () => {
+          const docs = Object.entries(state[name]).map(([id, d]) => ({id, data: () => d}));
+          if (field) docs.sort((a, b) => { const x = a.data()[field], y = b.data()[field]; return (x > y ? 1 : x < y ? -1 : 0) * (dir === 'desc' ? -1 : 1); });
+          cb({docs, metadata: {fromCache: false}});
+        };
+        subs.push(fire); setTimeout(fire); return () => subs.splice(subs.indexOf(fire), 1);
+      }
+    };
+    return q;
+  }
+  return {
+    collection,
+    exportAll: () => JSON.stringify({app: 'handmade-orders', version: 1, exportedAt: new Date().toISOString(), products: state.products, orders: state.orders}, null, 2),
+    importAll(obj){
+      if (!obj || typeof obj.orders !== 'object' || typeof obj.products !== 'object') throw new Error('bad');
+      state = {products: obj.products, orders: obj.orders, seeded: true}; persist(); notify();
+    }
+  };
+}
+let products = [], orders = [], gotP = false, gotO = false;
+let form = blankForm(), saving = false;
+let filter = {status: 'all', q: '', month: 'all'};
+
+function blankForm(){ return {id: null, createdAt: null, date: today(), customer: '', contact: '', lines: [{product: '', qty: 1, price: ''}], note: '', status: 'todo'}; }
+
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2200); }
+function banner(msg){ const b = $('#banner'); b.hidden = !msg; b.textContent = msg || ''; }
+
+/* ---------- 分頁 ---------- */
+const VIEWS = ['new', 'orders', 'products'];
+function route(){
+  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'new';
+  VIEWS.forEach(x => { $('#view-' + x).hidden = x !== v; });
+  document.querySelectorAll('nav.tabs a').forEach(a => a.dataset.v === v ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  scrollTo(0, 0);
+}
+addEventListener('hashchange', route);
+
+/* ---------- 登記表單 ---------- */
+function renderStatusSeg(){
+  $('#f-status').innerHTML = STATUS.map(s => `<button type="button" role="radio" data-s="${s.k}" aria-checked="${form.status === s.k}">${s.t}</button>`).join('');
+}
+function renderLines(){
+  const names = products.map(p => p.name);
+  $('#lines').innerHTML = form.lines.map((l, i) => {
+    const opts = [...names]; if (l.product && !opts.includes(l.product)) opts.push(l.product);
+    const chips = opts.length ? opts.map(n => `<button type="button" class="chip" role="radio" data-i="${i}" data-p="${esc(n)}" aria-checked="${l.product === n}">${esc(n)}</button>`).join('')
+      : `<span class="hint">還沒有商品，先到「商品」分頁新增。</span>`;
+    return `<div class="line">
+      <div class="line-head"><span>第 ${i + 1} 項</span>${form.lines.length > 1 ? `<button type="button" class="link danger" data-rm="${i}">移除</button>` : ''}</div>
+      <div class="chips" role="radiogroup" aria-label="第 ${i + 1} 項商品">${chips}</div>
+      <div class="line-row">
+        <div class="stepper"><button type="button" data-step="-1" data-i="${i}" aria-label="減少">−</button><input type="number" inputmode="numeric" min="1" id="qty-${i}" data-qty="${i}" value="${esc(l.qty)}" aria-label="數量"><button type="button" data-step="1" data-i="${i}" aria-label="增加">＋</button></div>
+        <div class="price"><label>單價（選填）<input type="number" inputmode="numeric" min="0" id="price-${i}" data-price="${i}" value="${esc(l.price)}" placeholder="NT$"></label></div>
+      </div>
+    </div>`;
+  }).join('');
+  renderTotal();
+}
+function renderTotal(){
+  let q = 0, a = 0, priced = false;
+  form.lines.forEach(l => { const n = Number(l.qty) || 0; q += n; if (l.price !== '' && l.price != null) { priced = true; a += n * Number(l.price); } });
+  $('#f-qty').textContent = q;
+  $('#f-amt').textContent = priced ? money(a) : '–';
+}
+function fillForm(){
+  $('#f-date').value = form.date; $('#f-customer').value = form.customer; $('#f-contact').value = form.contact; $('#f-note').value = form.note;
+  renderStatusSeg(); renderLines();
+  const editing = !!form.id;
+  $('#editing').hidden = !editing; $('#editing-name').textContent = form.customer || '這筆';
+  $('#form-title').textContent = editing ? '編輯訂單' : '登記新訂單';
+  $('#save').textContent = editing ? '儲存修改' : '儲存訂單';
+  $('#form-err').textContent = '';
+}
+$('#f-date').addEventListener('input', e => form.date = e.target.value);
+$('#f-customer').addEventListener('input', e => form.customer = e.target.value);
+$('#f-contact').addEventListener('input', e => form.contact = e.target.value);
+$('#f-note').addEventListener('input', e => form.note = e.target.value);
+$('#f-status').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; form.status = b.dataset.s; renderStatusSeg(); });
+$('#add-line').addEventListener('click', () => { form.lines.push({product: '', qty: 1, price: ''}); renderLines(); });
+$('#lines').addEventListener('click', e => {
+  const c = e.target.closest('[data-p]'), s = e.target.closest('[data-step]'), r = e.target.closest('[data-rm]');
+  if (c) { form.lines[+c.dataset.i].product = c.dataset.p; renderLines(); }
+  else if (s) { const l = form.lines[+s.dataset.i]; l.qty = Math.max(1, (Number(l.qty) || 0) + Number(s.dataset.step)); $('#qty-' + s.dataset.i).value = l.qty; renderTotal(); }
+  else if (r) { form.lines.splice(+r.dataset.rm, 1); renderLines(); }
+});
+$('#lines').addEventListener('input', e => {
+  if (e.target.dataset.qty != null) form.lines[+e.target.dataset.qty].qty = e.target.value;
+  if (e.target.dataset.price != null) form.lines[+e.target.dataset.price].price = e.target.value;
+  renderTotal();
+});
+$('#cancel-edit').addEventListener('click', () => { form = blankForm(); fillForm(); });
+
+$('#order-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (saving) return;
+  const err = $('#form-err');
+  if (!db) { err.textContent = '這個瀏覽器無法儲存資料（可能是無痕模式），請改用一般模式打開。'; return; }
+  if (!canWrite) { err.textContent = '你只有檢視權限，無法新增或修改訂單。'; return; }
+  const lines = form.lines.filter(l => l.product).map(l => ({product: l.product, qty: Math.max(1, Math.round(Number(l.qty) || 1)), price: l.price === '' || l.price == null ? null : Number(l.price)}));
+  if (!lines.length) { err.textContent = '請至少選一項商品。'; return; }
+  if (!form.date) { err.textContent = '請填日期。'; return; }
+  const body = {date: form.date, customer: form.customer.trim(), contact: form.contact.trim(), lines, note: form.note.trim(), status: form.status,
+    createdAt: form.createdAt || Date.now(), updatedAt: Date.now()};
+  saving = true; $('#save').disabled = true; err.textContent = '';
+  try {
+    const col = db.collection('orders');
+    await (form.id ? col.doc(form.id) : col.doc()).set(body);
+    const wasEdit = !!form.id;
+    form = blankForm(); fillForm();
+    toast(wasEdit ? '已儲存修改' : '已登記訂單');
+    if (wasEdit) location.hash = 'orders';
+  } catch (x) {
+    err.textContent = x && x.code === 'quota_exceeded' ? '手機的儲存空間不足，請先下載備份並刪除一些舊訂單。' : '儲存失敗，請再按一次。';
+  } finally { saving = false; $('#save').disabled = false; }
+});
+
+/* ---------- 訂單列表 ---------- */
+function filtered(){
+  const q = filter.q.trim().toLowerCase();
+  return orders.filter(o => (filter.status === 'all' || o.status === filter.status)
+    && (filter.month === 'all' || (o.date || '').startsWith(filter.month))
+    && (!q || [o.customer, o.contact, o.note, ...(o.lines || []).map(l => l.product)].join(' ').toLowerCase().includes(q)));
+}
+function orderQty(o){ return (o.lines || []).reduce((s, l) => s + (Number(l.qty) || 0), 0); }
+function orderAmt(o){ let a = 0, p = false; (o.lines || []).forEach(l => { if (l.price != null) { p = true; a += l.price * l.qty; } }); return p ? a : null; }
+function renderFilters(){
+  const counts = {all: orders.length}; STATUS.forEach(s => counts[s.k] = orders.filter(o => o.status === s.k).length);
+  $('#f-filter').innerHTML = [{k: 'all', t: '全部'}, ...STATUS].map(s => `<button type="button" class="chip" role="radio" data-f="${s.k}" aria-checked="${filter.status === s.k}">${s.t} <span class="num">${counts[s.k]}</span></button>`).join('');
+  const months = [...new Set(orders.map(o => (o.date || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+  if (filter.month !== 'all' && !months.includes(filter.month)) filter.month = 'all';
+  $('#month').innerHTML = `<option value="all">全部月份</option>` + months.map(m => `<option value="${m}" ${m === filter.month ? 'selected' : ''}>${m.replace('-', ' 年 ')} 月</option>`).join('');
+}
+function renderOrders(){
+  renderFilters();
+  const list = filtered();
+  const qty = list.reduce((s, o) => s + orderQty(o), 0);
+  const amts = list.map(orderAmt).filter(a => a != null);
+  $('#summary').innerHTML = `<span>訂單<b>${list.length}</b></span><span>件數<b>${qty}</b></span>${amts.length ? `<span>金額<b>${money(amts.reduce((s, a) => s + a, 0))}</b></span>` : ''}`;
+  const box = $('#olist');
+  if (!gotO) { box.innerHTML = `<div class="empty"><b>正在讀取訂單</b>稍等一下就會出現。</div>`; return; }
+  if (!orders.length) { box.innerHTML = `<div class="empty"><b>還沒有訂單</b>到「登記」分頁新增第一筆訂單，就會出現在這裡。</div>`; return; }
+  if (!list.length) { box.innerHTML = `<div class="empty"><b>沒有符合的訂單</b>換個篩選條件或清除搜尋看看。</div>`; return; }
+  let html = '', day = '';
+  list.forEach(o => {
+    if (o.date !== day) { day = o.date; html += `<div class="day">${esc(day.replace(/-/g, ' / '))}</div>`; }
+    const amt = orderAmt(o);
+    html += `<article class="order">
+      <div class="o-top"><div style="min-width:0"><div class="o-name">${esc(o.customer || '未填客人')}</div>${o.contact ? `<div class="o-contact">${esc(o.contact)}</div>` : ''}</div>
+        <button type="button" class="pill ${o.status}" data-cycle="${o.id}" aria-label="狀態：${SNAME[o.status] || o.status}，點一下切換">${SNAME[o.status] || '待製作'}</button></div>
+      <ul class="o-items">${(o.lines || []).map(l => `<li><span>${esc(l.product)}</span><span>× ${l.qty}${l.price != null ? ` · ${money(l.price * l.qty)}` : ''}</span></li>`).join('')}</ul>
+      ${o.note ? `<div class="o-note">${esc(o.note)}</div>` : ''}
+      <div class="o-foot"><span>共 <span class="num">${orderQty(o)}</span> 件${amt != null ? ` · <span class="num">${money(amt)}</span>` : ''}</span>
+        <span class="acts"><button type="button" class="link" data-edit="${o.id}">編輯</button><button type="button" class="link danger" data-del="${o.id}">刪除</button></span></div>
+    </article>`;
+  });
+  box.innerHTML = html;
+}
+$('#f-filter').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (!b) return; filter.status = b.dataset.f; renderOrders(); });
+$('#q').addEventListener('input', e => { filter.q = e.target.value; renderOrders(); });
+$('#month').addEventListener('change', e => { filter.month = e.target.value; renderOrders(); });
+$('#olist').addEventListener('click', async e => {
+  const cyc = e.target.closest('[data-cycle]'), ed = e.target.closest('[data-edit]'), del = e.target.closest('[data-del]');
+  if (cyc) {
+    if (!db || !canWrite) return toast('目前無法修改');
+    const o = orders.find(x => x.id === cyc.dataset.cycle); if (!o) return;
+    const i = STATUS.findIndex(s => s.k === o.status), next = STATUS[(i + 1) % STATUS.length].k;
+    cyc.disabled = true;
+    try { await db.collection('orders').doc(o.id).update({status: next, updatedAt: Date.now()}); toast(`已改成「${SNAME[next]}」`); }
+    catch (x) { toast('更新失敗，請再試一次'); cyc.disabled = false; }
+  } else if (ed) {
+    const o = orders.find(x => x.id === ed.dataset.edit); if (!o) return;
+    form = {id: o.id, createdAt: o.createdAt || null, date: o.date || today(), customer: o.customer || '', contact: o.contact || '', note: o.note || '', status: o.status || 'todo',
+      lines: (o.lines || []).map(l => ({product: l.product, qty: l.qty, price: l.price == null ? '' : l.price}))};
+    if (!form.lines.length) form.lines = [{product: '', qty: 1, price: ''}];
+    fillForm(); location.hash = 'new';
+  } else if (del) {
+    if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = '確定刪除？'; setTimeout(() => { if (del.isConnected) { del.dataset.armed = ''; del.textContent = '刪除'; } }, 3000); return; }
+    if (!db || !canWrite) return toast('目前無法刪除');
+    try { await db.collection('orders').doc(del.dataset.del).delete(); toast('已刪除訂單'); } catch (x) { toast('刪除失敗，請再試一次'); }
+  }
+});
+
+/* ---------- 匯出 ---------- */
+function toCSV(){
+  const head = ['日期', '客人', '聯絡方式', '商品', '數量', '單價', '小計', '狀態', '備註'];
+  const cell = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = [head];
+  [...filtered()].reverse().forEach(o => (o.lines || []).forEach((l, i) => rows.push([o.date, o.customer, o.contact, l.product, l.qty, l.price ?? '', l.price != null ? l.price * l.qty : '', SNAME[o.status] || '', i === 0 ? o.note : ''])));
+  return '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n');
+}
+function downloadFile(name, text, type){
+  const blob = new Blob([text], {type}), url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+$('#export').addEventListener('click', () => {
+  if (!filtered().length) return toast('目前沒有可匯出的訂單');
+  downloadFile(`訂單_${filter.month === 'all' ? '全部' : filter.month}_${today()}.csv`, toCSV(), 'text/csv;charset=utf-8');
+  toast('已匯出 CSV');
+});
+function showCSV(csv){ const b = $('#csvbox'); b.hidden = false; b.value = csv.replace(/^﻿/, ''); }
+$('#copy').addEventListener('click', () => {
+  if (!filtered().length) return toast('目前沒有可複製的訂單');
+  const text = toCSV().replace(/^﻿/, '').replace(/,/g, '\t');
+  navigator.clipboard?.writeText(text).then(() => toast('已複製，可直接貼到試算表'), () => { showCSV(text); $('#csvbox').select(); toast('請長按選取後複製'); })
+    ?? (showCSV(text), toast('請長按選取後複製'));
+});
+
+/* ---------- 商品 ---------- */
+function renderProducts(){
+  const used = {}; orders.forEach(o => (o.lines || []).forEach(l => used[l.product] = (used[l.product] || 0) + (Number(l.qty) || 0)));
+  const box = $('#plist');
+  if (!gotP) { box.innerHTML = `<div class="empty"><b>正在讀取商品</b>稍等一下。</div>`; return; }
+  if (!products.length) { box.innerHTML = `<div class="empty"><b>還沒有商品</b>在下面輸入商品名稱，例如美甲片、耳環、手鍊、項鍊。</div>`; return; }
+  box.innerHTML = products.map(p => `<div class="prod" data-id="${p.id}">
+    <div style="min-width:0"><div class="n">${esc(p.name)}</div><div class="c">累計 <span class="num">${used[p.name] || 0}</span> 件</div></div>
+    <div class="acts"><button type="button" class="link" data-ren="${p.id}">改名</button><button type="button" class="link danger" data-pdel="${p.id}">刪除</button></div></div>`).join('');
+}
+$('#plist').addEventListener('click', async e => {
+  const ren = e.target.closest('[data-ren]'), del = e.target.closest('[data-pdel]'), ok = e.target.closest('[data-rok]'), no = e.target.closest('[data-rno]');
+  if (ren) {
+    const p = products.find(x => x.id === ren.dataset.ren), row = ren.closest('.prod');
+    row.innerHTML = `<input type="text" id="ren-${p.id}" value="${esc(p.name)}" aria-label="新名稱"><div class="acts"><button type="button" class="link" data-rok="${p.id}">儲存</button><button type="button" class="link" data-rno="1">取消</button></div>`;
+    row.querySelector('input').focus();
+  } else if (no) { renderProducts(); }
+  else if (ok) {
+    const name = $('#ren-' + ok.dataset.rok).value.trim();
+    if (!name) return toast('名稱不能空白');
+    if (products.some(p => p.name === name && p.id !== ok.dataset.rok)) return toast('已經有這個商品了');
+    try { await db.collection('products').doc(ok.dataset.rok).update({name}); toast('已改名'); } catch (x) { toast('改名失敗，請再試一次'); }
+  } else if (del) {
+    if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = '確定刪除？'; setTimeout(() => { if (del.isConnected) { del.dataset.armed = ''; del.textContent = '刪除'; } }, 3000); return; }
+    try { await db.collection('products').doc(del.dataset.pdel).delete(); toast('已刪除商品'); } catch (x) { toast('刪除失敗，請再試一次'); }
+  }
+});
+$('#addp').addEventListener('submit', async e => {
+  e.preventDefault();
+  const inp = $('#p-new'), name = inp.value.trim();
+  if (!name) return toast('請輸入商品名稱');
+  if (!db || !canWrite) return toast('目前無法新增');
+  if (products.some(p => p.name === name)) return toast('已經有這個商品了');
+  const sort = products.reduce((m, p) => Math.max(m, p.sort || 0), 0) + 1;
+  try { await db.collection('products').doc().set({name, sort}); inp.value = ''; toast(`已新增「${name}」`); } catch (x) { toast('新增失敗，請再試一次'); }
+});
+
+/* ---------- 頁首摘要 ---------- */
+function renderStats(){
+  const m = today().slice(0, 7), mo = orders.filter(o => (o.date || '').startsWith(m));
+  $('#st-todo').textContent = gotO ? orders.filter(o => o.status === 'todo').length : '–';
+  $('#st-month').textContent = gotO ? mo.length : '–';
+  $('#st-qty').textContent = gotO ? mo.reduce((s, o) => s + orderQty(o), 0) : '–';
+}
+
+/* ---------- 啟動 ---------- */
+route(); fillForm(); renderOrders(); renderProducts(); renderStats();
+db = makeLocalDB();
+if (!db) {
+  $('#sync').textContent = '無法儲存'; banner('這個瀏覽器無法儲存資料（可能是無痕模式），請改用一般模式打開。');
+  gotP = gotO = true; renderOrders(); renderProducts(); renderStats();
+} else {
+  $('#sync').textContent = '存在這支手機';
+  db.collection('products').orderBy('sort').onSnapshot(s => { products = s.docs.map(d => ({id: d.id, ...d.data()})); gotP = true; renderLines(); renderProducts(); });
+  db.collection('orders').onSnapshot(s => {
+    orders = s.docs.map(d => ({id: d.id, ...d.data()})).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+    gotO = true; renderOrders(); renderProducts(); renderStats();
+  });
+}
+/* 店名 */
+function loadShop(){ let n = ''; try { n = localStorage.getItem(SHOP_KEY) || ''; } catch (e) {} $('#shop-name').textContent = n || '我的小店'; $('#shop-input').value = n; document.title = (n ? n + '｜' : '') + '手作訂單管理'; }
+$('#shop-form').addEventListener('submit', e => { e.preventDefault(); try { localStorage.setItem(SHOP_KEY, $('#shop-input').value.trim()); } catch (x) {} loadShop(); toast('已儲存店名'); });
+loadShop();
+/* 備份 */
+$('#backup').addEventListener('click', () => {
+  if (!db) return toast('目前無法備份');
+  downloadFile(`訂單備份_${today()}.json`, db.exportAll(), 'application/json');
+  $('#backup-hint').textContent = `已下載 ${today()} 的備份檔，請存到雲端硬碟或傳給自己保存。`;
+});
+$('#restore').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !db) return;
+  const box = $('#backup-hint');
+  try {
+    const obj = JSON.parse(await f.text());
+    if (!obj || typeof obj.orders !== 'object') throw new Error('bad');
+    box.innerHTML = `備份檔裡有 <b>${Object.keys(obj.orders).length}</b> 筆訂單。匯入會<b>取代</b>目前手機裡的所有資料。<br><button type="button" class="link danger" id="do-restore">確定匯入</button> <button type="button" class="link" id="no-restore">取消</button>`;
+    $('#do-restore').onclick = () => { try { db.importAll(obj); box.textContent = '已匯入備份。'; toast('已匯入備份'); } catch (x) { box.textContent = '這個檔案不是訂單備份檔，請確認後再試。'; } };
+    $('#no-restore').onclick = () => { box.textContent = ''; };
+  } catch (x) { box.textContent = '這個檔案不是訂單備份檔，請確認後再試。'; }
+});
+</script>
+</body>
+</html>
